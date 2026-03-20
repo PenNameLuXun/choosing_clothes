@@ -1,0 +1,11 @@
+{
+  "modelUrl": "/models/avatar-body/base.glb",
+  "referenceHeightCm": 172,
+  "rootOffsetY": -1.48,
+  "rootRotationY": 0,
+  "notes": [
+    "Place your real body model at /public/models/avatar-body/base.glb",
+    "The loader will prefer the GLB model and fall back to the procedural body if the file is missing",
+    "Recommended to include morph targets for shoulderWide, chestFull, waistSlim, torsoTall, hipWide, legLong, bodyMass"
+  ]
+}

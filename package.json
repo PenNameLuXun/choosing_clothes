@@ -1,0 +1,16 @@
+{
+  "name": "choosing-clothes",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/web",
+    "packages/shared-types"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev -w apps/web",
+    "build:web": "npm run build -w apps/web",
+    "lint:web": "npm run lint -w apps/web",
+    "test:stage1": "python3 -m unittest discover -s tests -p 'test_*.py'",
+    "test": "npm run test:stage1"
+  }
+}
