@@ -4,11 +4,16 @@ dist
 build
 .turbo
 .venv
+.venv-smpl
 __pycache__
 .pytest_cache
 .mypy_cache
 .DS_Store
 .env
 *.pyc
+*.Zone.Identifier
 uploads
 storage-data
+apps/web/public/models/avatar-body/*.npz
+apps/web/public/models/avatar-body/*.zip
+apps/web/public/models/avatar-body/*.glb

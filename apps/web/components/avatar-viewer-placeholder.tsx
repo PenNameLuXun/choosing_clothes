@@ -19,14 +19,27 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-function CameraRig({ cameraDistance }: { cameraDistance: number }) {
+function CameraRig({
+  cameraDistance,
+  targetY,
+  frameHeight,
+  panX,
+  panY
+}: {
+  cameraDistance: number;
+  targetY: number;
+  frameHeight: number;
+  panX: number;
+  panY: number;
+}) {
   const { camera } = useThree();
 
   useFrame((_, delta) => {
-    camera.position.x = THREE.MathUtils.damp(camera.position.x, 0, 5, delta);
-    camera.position.y = THREE.MathUtils.damp(camera.position.y, 0.55, 5, delta);
+    const elevatedY = targetY + frameHeight * 0.08 + panY;
+    camera.position.x = THREE.MathUtils.damp(camera.position.x, panX, 5, delta);
+    camera.position.y = THREE.MathUtils.damp(camera.position.y, elevatedY, 5, delta);
     camera.position.z = THREE.MathUtils.damp(camera.position.z, cameraDistance, 5, delta);
-    camera.lookAt(0, 0.75, 0);
+    camera.lookAt(panX, targetY + panY, 0);
   });
 
   return null;
@@ -36,12 +49,22 @@ function ViewerScene({
   stats,
   targetRotation,
   cameraDistance,
-  onModelStatusChange
+  frameTargetY,
+  frameHeight,
+  panX,
+  panY,
+  onModelStatusChange,
+  onModelBoundsChange
 }: {
   stats: AvatarBodySchema;
   targetRotation: number;
   cameraDistance: number;
+  frameTargetY: number;
+  frameHeight: number;
+  panX: number;
+  panY: number;
   onModelStatusChange: (status: AvatarBodyModelStatus) => void;
+  onModelBoundsChange: (payload: { centerY: number; height: number; width: number }) => void;
 }) {
   return (
     <Canvas className="viewer-canvas" camera={{ position: [0, 0.55, cameraDistance], fov: 24 }} shadows dpr={[1, 1.75]}>
@@ -57,12 +80,19 @@ function ViewerScene({
         <meshStandardMaterial color="#dcc1aa" roughness={0.92} metalness={0.02} />
       </mesh>
 
-      <CameraRig cameraDistance={cameraDistance} />
+      <CameraRig
+        cameraDistance={cameraDistance}
+        targetY={frameTargetY}
+        frameHeight={frameHeight}
+        panX={panX}
+        panY={panY}
+      />
       <RealAvatarBody
         stats={stats}
         targetRotation={targetRotation}
         manifest={defaultAvatarBodyModelManifest}
         onStatusChange={onModelStatusChange}
+        onBoundsChange={onModelBoundsChange}
         fallback={<ProceduralAvatarBody stats={stats} targetRotation={targetRotation} />}
       />
     </Canvas>
@@ -73,16 +103,36 @@ export default function AvatarViewerPlaceholder({ stats }: { stats: AvatarBodySc
   const [rotation, setRotation] = useState(0.12);
   const [viewMode, setViewMode] = useState<ViewMode>("front");
   const [cameraDistance, setCameraDistance] = useState(5.8);
+  const [frameTargetY, setFrameTargetY] = useState(0.82);
+  const [frameHeight, setFrameHeight] = useState(1.7);
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
   const [modelStatus, setModelStatus] = useState<AvatarBodyModelStatus>("fallback");
-  const dragStateRef = useRef<{ pointerId: number | null; startX: number; startRotation: number }>({
+  const dragStateRef = useRef<{
+    pointerId: number | null;
+    button: number;
+    startX: number;
+    startY: number;
+    startRotation: number;
+    startPanX: number;
+    startPanY: number;
+  }>({
     pointerId: null,
+    button: 0,
     startX: 0,
-    startRotation: 0
+    startY: 0,
+    startRotation: 0,
+    startPanX: 0,
+    startPanY: 0
   });
   const stageRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setCameraDistance(5.8);
+    setFrameTargetY(0.82);
+    setFrameHeight(1.7);
+    setPanX(0);
+    setPanY(0);
   }, [stats.name]);
 
   useEffect(() => {
@@ -113,8 +163,12 @@ export default function AvatarViewerPlaceholder({ stats }: { stats: AvatarBodySc
   function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
     dragStateRef.current = {
       pointerId: event.pointerId,
+      button: event.button,
       startX: event.clientX,
-      startRotation: rotation
+      startY: event.clientY,
+      startRotation: rotation,
+      startPanX: panX,
+      startPanY: panY
     };
     event.currentTarget.setPointerCapture(event.pointerId);
   }
@@ -125,6 +179,14 @@ export default function AvatarViewerPlaceholder({ stats }: { stats: AvatarBodySc
     }
 
     const deltaX = event.clientX - dragStateRef.current.startX;
+    const deltaY = event.clientY - dragStateRef.current.startY;
+
+    if (dragStateRef.current.button === 1) {
+      setPanX(dragStateRef.current.startPanX - deltaX * 0.0045);
+      setPanY(dragStateRef.current.startPanY + deltaY * 0.0045);
+      return;
+    }
+
     setRotation(dragStateRef.current.startRotation + deltaX * 0.012);
   }
 
@@ -133,6 +195,14 @@ export default function AvatarViewerPlaceholder({ stats }: { stats: AvatarBodySc
       dragStateRef.current.pointerId = null;
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
+  }
+
+  function handleModelBoundsChange(payload: { centerY: number; height: number; width: number }) {
+    const targetY = payload.centerY;
+    const framedDistance = clamp(Math.max(payload.height * 2.15, payload.width * 2.8), 3.6, 6.8);
+    setFrameTargetY(targetY);
+    setFrameHeight(payload.height);
+    setCameraDistance((current) => (Math.abs(current - 5.8) < 0.001 ? framedDistance : current));
   }
 
   return (
@@ -172,7 +242,12 @@ export default function AvatarViewerPlaceholder({ stats }: { stats: AvatarBodySc
           stats={stats}
           targetRotation={targetRotation}
           cameraDistance={cameraDistance}
+          frameTargetY={frameTargetY}
+          frameHeight={frameHeight}
+          panX={panX}
+          panY={panY}
           onModelStatusChange={setModelStatus}
+          onModelBoundsChange={handleModelBoundsChange}
         />
       </div>
 
@@ -185,6 +260,7 @@ export default function AvatarViewerPlaceholder({ stats }: { stats: AvatarBodySc
         <span>Leg {stats.legLengthCm} · Arm {stats.armLengthCm}</span>
         <span>Model Source: {getAvatarBodyModelStatusLabel(modelStatus)}</span>
         <span>Zoom {zoomPercent}%</span>
+        <span>Middle Mouse Drag: Pan View</span>
       </div>
     </div>
   );

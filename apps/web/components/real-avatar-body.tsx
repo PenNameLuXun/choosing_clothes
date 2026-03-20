@@ -26,19 +26,36 @@ function LoadedRealAvatarBody({
   scene,
   stats,
   targetRotation,
-  manifest
+  manifest,
+  onBoundsChange
 }: {
   scene: THREE.Group;
   stats: AvatarBodySchema;
   targetRotation: number;
   manifest: AvatarBodyModelManifest;
+  onBoundsChange?: (payload: { centerY: number; height: number; width: number }) => void;
 }) {
   const rootRef = useRef<THREE.Group>(null);
   const instance = useMemo(() => clone(scene) as THREE.Group, [scene]);
 
   useLayoutEffect(() => {
     applyAvatarSchemaToBodyModel(instance, stats, manifest);
-  }, [instance, manifest, stats]);
+    if (rootRef.current) {
+      rootRef.current.position.y = manifest.rootOffsetY;
+      rootRef.current.updateMatrixWorld(true);
+
+      const bounds = new THREE.Box3().setFromObject(rootRef.current);
+      const size = new THREE.Vector3();
+      const center = new THREE.Vector3();
+      bounds.getSize(size);
+      bounds.getCenter(center);
+      onBoundsChange?.({
+        centerY: center.y,
+        height: size.y,
+        width: size.x
+      });
+    }
+  }, [instance, manifest, onBoundsChange, stats]);
 
   useFrame((_, delta) => {
     if (!rootRef.current) {
@@ -60,12 +77,14 @@ export default function RealAvatarBody({
   targetRotation,
   manifest = defaultAvatarBodyModelManifest,
   onStatusChange,
+  onBoundsChange,
   fallback
 }: {
   stats: AvatarBodySchema;
   targetRotation: number;
   manifest?: AvatarBodyModelManifest;
   onStatusChange?: (status: AvatarBodyModelStatus) => void;
+  onBoundsChange?: (payload: { centerY: number; height: number; width: number }) => void;
   fallback: React.ReactNode;
 }) {
   const [status, setStatus] = useState<AvatarBodyModelStatus>("loading");
@@ -108,5 +127,13 @@ export default function RealAvatarBody({
     return <>{fallback}</>;
   }
 
-  return <LoadedRealAvatarBody scene={scene} stats={stats} targetRotation={targetRotation} manifest={manifest} />;
+  return (
+    <LoadedRealAvatarBody
+      scene={scene}
+      stats={stats}
+      targetRotation={targetRotation}
+      manifest={manifest}
+      onBoundsChange={onBoundsChange}
+    />
+  );
 }
