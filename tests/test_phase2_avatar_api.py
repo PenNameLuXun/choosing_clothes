@@ -1,6 +1,7 @@
 import os
 import sys
 import unittest
+from io import BytesIO
 from pathlib import Path
 
 os.environ["DATABASE_URL"] = "sqlite:///./storage-data/test_avatar_api.db"
@@ -108,17 +109,81 @@ class AvatarApiTests(unittest.TestCase):
         self.assertNotEqual(data["updatedAt"], created["updatedAt"])
 
 
+class GarmentApiTests(unittest.TestCase):
+    def setUp(self) -> None:
+        (ROOT / "storage-data").mkdir(exist_ok=True)
+        reset_db()
+        self.client = TestClient(app)
+
+    def make_payload(self, *, name: str = "White T-Shirt", category: str = "tshirt") -> dict:
+        return {
+            "name": name,
+            "category": category,
+            "imageUrl": "https://images.example.com/garments/white-tshirt.png",
+        }
+
+    def test_list_garments_starts_empty(self) -> None:
+        response = self.client.get("/api/garments")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])
+
+    def test_create_garment_returns_saved_payload(self) -> None:
+        payload = self.make_payload()
+
+        response = self.client.post("/api/garments", json=payload)
+
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertEqual(data["name"], payload["name"])
+        self.assertEqual(data["category"], payload["category"])
+        self.assertEqual(data["imageUrl"], payload["imageUrl"])
+        self.assertEqual(data["status"], "uploaded")
+        self.assertEqual(data["parsedMeta"], {})
+        self.assertIn("id", data)
+
+    def test_get_garment_by_id_returns_saved_garment(self) -> None:
+        created = self.client.post("/api/garments", json=self.make_payload()).json()
+
+        response = self.client.get(f"/api/garments/{created['id']}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["id"], created["id"])
+        self.assertEqual(response.json()["name"], "White T-Shirt")
+
+    def test_get_unknown_garment_returns_404(self) -> None:
+        response = self.client.get("/api/garments/missing-id")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["detail"], "Garment not found")
+
+    def test_upload_garment_image_returns_accessible_path(self) -> None:
+        response = self.client.post(
+            "/api/uploads/garments",
+            files={"file": ("shirt.png", BytesIO(b"fake-image-bytes"), "image/png")},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("/uploads/garments/", data["imageUrl"])
+        self.assertTrue(data["filename"].endswith(".png"))
+
+
 class AvatarWebScaffoldTests(unittest.TestCase):
     def test_avatar_routes_exist(self) -> None:
         avatar_list_page = ROOT / "apps" / "web" / "app" / "avatars" / "page.tsx"
         avatar_edit_page = ROOT / "apps" / "web" / "app" / "avatars" / "[id]" / "edit" / "page.tsx"
         avatar_editor_client = ROOT / "apps" / "web" / "app" / "avatars" / "[id]" / "edit" / "avatar-editor-client.tsx"
         avatar_viewer = ROOT / "apps" / "web" / "components" / "avatar-viewer-placeholder.tsx"
+        garment_list_page = ROOT / "apps" / "web" / "app" / "garments" / "page.tsx"
+        garment_create_form = ROOT / "apps" / "web" / "app" / "garments" / "create-garment-form.tsx"
 
         self.assertTrue(avatar_list_page.exists())
         self.assertTrue(avatar_edit_page.exists())
         self.assertTrue(avatar_editor_client.exists())
         self.assertTrue(avatar_viewer.exists())
+        self.assertTrue(garment_list_page.exists())
+        self.assertTrue(garment_create_form.exists())
 
     def test_avatar_pages_have_expected_copy(self) -> None:
         avatar_list_content = (ROOT / "apps" / "web" / "app" / "avatars" / "page.tsx").read_text()
@@ -127,6 +192,8 @@ class AvatarWebScaffoldTests(unittest.TestCase):
         avatar_viewer = (ROOT / "apps" / "web" / "components" / "avatar-viewer-placeholder.tsx").read_text()
         procedural_body = (ROOT / "apps" / "web" / "components" / "procedural-avatar-body.tsx").read_text()
         real_body = (ROOT / "apps" / "web" / "components" / "real-avatar-body.tsx").read_text()
+        garment_list_content = (ROOT / "apps" / "web" / "app" / "garments" / "page.tsx").read_text()
+        garment_form_content = (ROOT / "apps" / "web" / "app" / "garments" / "create-garment-form.tsx").read_text()
 
         self.assertIn("Avatar Library", avatar_list_content)
         self.assertIn("Create Avatar", avatar_list_content)
@@ -150,6 +217,15 @@ class AvatarWebScaffoldTests(unittest.TestCase):
         self.assertIn("meshStandardMaterial", avatar_viewer)
         self.assertIn("Rotate Left", avatar_viewer)
         self.assertIn("Front View", avatar_viewer)
+        self.assertIn("Garment Library", garment_list_content)
+        self.assertIn("Create Garment", garment_list_content)
+        self.assertIn("loadGarments", garment_list_content)
+        self.assertIn("Saved Garments", garment_list_content)
+        self.assertIn("Save Garment", garment_form_content)
+        self.assertIn("Garment saved", garment_form_content)
+        self.assertIn("Uploading garment image", garment_form_content)
+        self.assertIn("api/uploads/garments", garment_form_content)
+        self.assertIn("router.refresh", garment_form_content)
 
 
 if __name__ == "__main__":

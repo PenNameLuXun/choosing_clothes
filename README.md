@@ -63,6 +63,43 @@ docs/
 
 ## 本地开发
 
+### 一键启动前后端
+
+在仓库根目录执行：
+
+```bash
+npm run dev
+```
+
+这个脚本会自动：
+
+- 初始化 `.env`（如果不存在）
+- 启动 `docker compose`
+- 启动 FastAPI 后端
+- 启动 Next.js 前端
+
+启动后可直接访问：
+
+```text
+http://localhost:3000
+http://localhost:3000/avatars
+http://localhost:3000/avatars/new/edit
+http://localhost:8765/health
+```
+
+日志会写到：
+
+```text
+.dev/logs/api.log
+.dev/logs/web.log
+```
+
+停止服务：
+
+```bash
+npm run dev:stop
+```
+
 ### 运行阶段 1 测试
 
 ```bash

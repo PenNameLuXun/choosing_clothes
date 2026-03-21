@@ -34,13 +34,13 @@ def get_session() -> Session:
 
 
 def init_db() -> None:
-    from .entities import AvatarRecord
+    from .entities import AvatarRecord, GarmentRecord
 
     Base.metadata.create_all(bind=engine)
 
 
 def reset_db() -> None:
-    from .entities import AvatarRecord
+    from .entities import AvatarRecord, GarmentRecord
 
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)

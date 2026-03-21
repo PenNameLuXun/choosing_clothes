@@ -178,6 +178,10 @@ ul {
   color: var(--text);
 }
 
+.file-input {
+  padding: 10px 14px;
+}
+
 .status-line {
   margin-bottom: 0;
 }
@@ -399,6 +403,41 @@ ul {
 
 .viewer-stats strong {
   font-size: 24px;
+}
+
+.garment-list {
+  display: grid;
+  gap: 14px;
+}
+
+.garment-card {
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255, 250, 244, 0.72);
+}
+
+.garment-card-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.garment-card-copy strong {
+  font-size: 22px;
+}
+
+.garment-preview {
+  width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.garment-url {
+  overflow-wrap: anywhere;
+  font-size: 15px;
 }
 
 @media (max-width: 768px) {

@@ -4,6 +4,10 @@ export type TryOnJobStatus =
   | "succeeded"
   | "failed";
 
+export type GarmentCategory = "tshirt" | "shirt" | "dress" | "pants" | "unknown";
+
+export type GarmentStatus = "uploaded" | "parsing" | "ready" | "failed";
+
 export type AvatarBaseGender = "female" | "male" | "neutral";
 
 export interface AvatarSummary {
@@ -57,6 +61,19 @@ export interface AvatarMorphProfile {
 export interface GarmentSummary {
   id: string;
   name: string;
-  category: "tshirt" | "shirt" | "dress" | "pants" | "unknown";
+  category: GarmentCategory;
   imageUrl: string;
+  status: GarmentStatus;
+}
+
+export interface GarmentCreateInput {
+  name: string;
+  category: GarmentCategory;
+  imageUrl: string;
+}
+
+export interface Garment extends GarmentSummary {
+  parsedMeta: Record<string, string | number | boolean | null>;
+  createdAt: string;
+  updatedAt: string;
 }

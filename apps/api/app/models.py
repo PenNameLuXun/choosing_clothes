@@ -5,6 +5,7 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 
 from .entities import AvatarRecord
+from .entities import GarmentRecord
 
 
 class AvatarInput(BaseModel):
@@ -118,4 +119,64 @@ class Avatar(BaseModel):
                 "morphParams": payload.morphParams,
                 "updatedAt": datetime.now(timezone.utc).isoformat(),
             }
+        )
+
+
+class GarmentInput(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    category: Literal["tshirt", "shirt", "dress", "pants", "unknown"]
+    imageUrl: str = Field(min_length=1, max_length=512)
+
+
+class GarmentCreate(GarmentInput):
+    pass
+
+
+class Garment(BaseModel):
+    id: str
+    name: str
+    category: Literal["tshirt", "shirt", "dress", "pants", "unknown"]
+    imageUrl: str
+    status: Literal["uploaded", "parsing", "ready", "failed"]
+    parsedMeta: dict[str, str | int | float | bool | None]
+    createdAt: str
+    updatedAt: str
+
+    @classmethod
+    def from_create(cls, payload: GarmentCreate) -> "Garment":
+        timestamp = datetime.now(timezone.utc).isoformat()
+        return cls(
+            id=str(uuid4()),
+            name=payload.name,
+            category=payload.category,
+            imageUrl=payload.imageUrl,
+            status="uploaded",
+            parsedMeta={},
+            createdAt=timestamp,
+            updatedAt=timestamp,
+        )
+
+    @classmethod
+    def from_record(cls, record: GarmentRecord) -> "Garment":
+        return cls(
+            id=record.id,
+            name=record.name,
+            category=record.category,
+            imageUrl=record.image_url,
+            status=record.status,
+            parsedMeta=record.parsed_meta,
+            createdAt=record.created_at.isoformat(),
+            updatedAt=record.updated_at.isoformat(),
+        )
+
+    def to_record(self) -> GarmentRecord:
+        return GarmentRecord(
+            id=self.id,
+            name=self.name,
+            category=self.category,
+            image_url=self.imageUrl,
+            status=self.status,
+            parsed_meta=self.parsedMeta,
+            created_at=datetime.fromisoformat(self.createdAt),
+            updated_at=datetime.fromisoformat(self.updatedAt),
         )

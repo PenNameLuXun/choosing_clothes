@@ -1,7 +1,9 @@
 from sqlalchemy.orm import Session
 
 from .entities import AvatarRecord
+from .entities import GarmentRecord
 from .models import Avatar
+from .models import Garment
 
 
 class AvatarRepository:
@@ -45,3 +47,25 @@ class AvatarRepository:
         self.session.flush()
         self.session.refresh(record)
         return Avatar.from_record(record)
+
+
+class GarmentRepository:
+    def __init__(self, session: Session):
+        self.session = session
+
+    def list(self) -> list[Garment]:
+        records = self.session.query(GarmentRecord).order_by(GarmentRecord.created_at.desc()).all()
+        return [Garment.from_record(record) for record in records]
+
+    def create(self, garment: Garment) -> Garment:
+        record = garment.to_record()
+        self.session.add(record)
+        self.session.flush()
+        self.session.refresh(record)
+        return Garment.from_record(record)
+
+    def get(self, garment_id: str) -> Garment | None:
+        record = self.session.get(GarmentRecord, garment_id)
+        if record is None:
+            return None
+        return Garment.from_record(record)

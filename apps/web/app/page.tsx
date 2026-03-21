@@ -21,6 +21,9 @@ export default function HomePage() {
           <Link className="action-link" href="/avatars">
             打开 Avatar Library
           </Link>
+          <Link className="action-link secondary" href="/garments">
+            打开 Garment Library
+          </Link>
         </div>
       </section>
 
