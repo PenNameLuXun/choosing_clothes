@@ -14,6 +14,13 @@ class Settings(BaseSettings):
     upload_dir: str = str(UPLOAD_ROOT)
     replicate_api_token: str = ""
 
+    # AI 试穿服务商："replicate" 或 "huggingface"
+    tryon_provider: str = "replicate"
+    # HuggingFace token（可选，不填也能用免费额度，填了速度更快）
+    hf_token: str = ""
+    # HuggingFace Space ID，默认官方 IDM-VTON
+    hf_tryon_space: str = "yisol/IDM-VTON"
+
     model_config = SettingsConfigDict(
         env_file=[str(REPO_ROOT / ".env"), ".env"],
         extra="ignore",

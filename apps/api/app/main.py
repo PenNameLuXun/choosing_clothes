@@ -24,7 +24,15 @@ try:
     _REPLICATE_AVAILABLE = True
 except Exception:  # noqa: BLE001
     _REPLICATE_AVAILABLE = False
-    logger.warning("replicate not available, AI try-on disabled")
+    logger.warning("replicate not available, AI try-on via Replicate disabled")
+
+# gradio_client 是可选依赖（HuggingFace Spaces）
+try:
+    from gradio_client import Client as _GradioClient, handle_file as _hf_handle_file
+    _GRADIO_AVAILABLE = True
+except Exception:  # noqa: BLE001
+    _GRADIO_AVAILABLE = False
+    logger.warning("gradio_client not available, AI try-on via HuggingFace disabled")
 
 from .config import settings
 from .db import get_session, init_db
@@ -33,7 +41,10 @@ from .repository import AvatarRepository, GarmentRepository
 
 upload_root = Path(settings.upload_dir)
 garment_upload_root = upload_root / "garments"
+# 模板人体照片：优先 uploads/templates（本地覆盖），回退到 static/templates（随代码提交）
+_static_template_root = Path(__file__).resolve().parents[1] / "static" / "templates"
 template_root = upload_root / "templates"
+tryon_result_root = upload_root / "tryon"
 upload_root.mkdir(parents=True, exist_ok=True)
 
 # IDM-VTON 服装类别映射
@@ -50,6 +61,7 @@ _CATEGORY_MAP = {
 async def lifespan(_: FastAPI):
     garment_upload_root.mkdir(parents=True, exist_ok=True)
     template_root.mkdir(parents=True, exist_ok=True)
+    tryon_result_root.mkdir(parents=True, exist_ok=True)
     init_db()
     yield
 
@@ -189,84 +201,128 @@ class TryOnRequest(BaseModel):
     garmentId: str
 
 
-@app.post("/api/tryon/generate")
-async def generate_tryon(payload: TryOnRequest) -> dict[str, str]:
-    """调用 Replicate IDM-VTON 生成试穿效果图。
-
-    前置条件：
-    - .env 中配置 REPLICATE_API_TOKEN
-    - uploads/templates/ 目录下放置参考人体照片：
-        female.jpg / male.jpg / neutral.jpg
-      照片要求：正面站立全身或半身照，背景简洁，无遮挡。
-    """
+async def _tryon_replicate(
+    template_path: Path, garment_path: Path, garment_des: str, category: str
+) -> str:
+    """调用 Replicate IDM-VTON，返回结果图片 URL。"""
     if not _REPLICATE_AVAILABLE:
-        raise HTTPException(status_code=503, detail="replicate package not available")
+        raise HTTPException(status_code=503, detail="replicate package not installed")
     if not settings.replicate_api_token:
-        raise HTTPException(
-            status_code=503,
-            detail="REPLICATE_API_TOKEN not configured. Add it to .env."
-        )
+        raise HTTPException(status_code=503, detail="REPLICATE_API_TOKEN not configured in .env")
 
-    # 获取服装记录
+    client = _replicate_lib.Client(api_token=settings.replicate_api_token)
+    with open(template_path, "rb") as hf, open(garment_path, "rb") as gf:
+        output = await client.async_run(
+            "cuuupid/idm-vton:0513734a452173b8173e907e3a59d19a36266e55b48528559432bd21c7d7e985",
+            input={
+                "human_img":       hf,
+                "garm_img":        gf,
+                "garment_des":     garment_des,
+                "category":        category,
+                "is_checked":      True,
+                "is_checked_crop": False,
+                "denoise_steps":   30,
+                "seed":            42,
+            },
+        )
+    result = output[0] if isinstance(output, list) else output
+    return str(result)
+
+
+async def _tryon_huggingface(
+    template_path: Path, garment_path: Path, garment_des: str,
+    base_url: str,
+) -> str:
+    """调用 HuggingFace Space IDM-VTON，结果保存本地后返回 URL。"""
+    import asyncio
+
+    if not _GRADIO_AVAILABLE:
+        raise HTTPException(status_code=503, detail="gradio_client package not installed")
+
+    client = _GradioClient(
+        settings.hf_tryon_space,
+        token=settings.hf_token or None,
+    )
+    try:
+        result = await asyncio.to_thread(
+            client.predict,
+            dict={"background": _hf_handle_file(str(template_path)), "layers": [], "composite": None},
+            garm_img=_hf_handle_file(str(garment_path)),
+            garment_des=garment_des,
+            is_checked=True,
+            is_checked_crop=False,
+            denoise_steps=30,
+            seed=42,
+            api_name="/tryon",
+        )
+    except Exception as exc:
+        logger.error("HuggingFace Space error: %s", exc)
+        raise HTTPException(status_code=502, detail=f"AI generation failed: {exc}") from exc
+
+    # result 是 (output_img_path, masked_img_path)，均为本地临时文件
+    output_tmp = Path(result[0])
+    dest_name = f"{uuid4()}{output_tmp.suffix or '.jpg'}"
+    dest_path = tryon_result_root / dest_name
+    dest_path.write_bytes(output_tmp.read_bytes())
+    return f"{base_url}/uploads/tryon/{dest_name}"
+
+
+@app.post("/api/tryon/generate")
+async def generate_tryon(payload: TryOnRequest, request: Request) -> dict[str, str]:
+    """生成 AI 试穿效果图。
+
+    服务商通过 TRYON_PROVIDER 切换（.env）：
+      TRYON_PROVIDER=replicate   → 调用 Replicate（需 REPLICATE_API_TOKEN，约 $0.03/次）
+      TRYON_PROVIDER=huggingface → 调用 HuggingFace Space（免费，较慢）
+
+    模板照片放在 uploads/templates/<gender>.jpg（正面站立，背景简洁）。
+    """
+    # ── 获取服装 ──
     with get_session() as session:
         garment = GarmentRepository(session).get(payload.garmentId)
     if garment is None:
         raise HTTPException(status_code=404, detail="Garment not found")
 
-    # 从 imageUrl 反推本地文件路径（imageUrl 形如 http://host/uploads/garments/xxx.png）
     garment_filename = Path(garment.imageUrl).name
     garment_path = garment_upload_root / garment_filename
     if not garment_path.exists():
-        raise HTTPException(status_code=404, detail=f"Garment image file not found: {garment_filename}")
+        raise HTTPException(status_code=404, detail=f"Garment image not found: {garment_filename}")
 
-    # 获取 avatar 性别，选对应模板照片
+    # ── 获取模板照片 ──
     with get_session() as session:
         avatar = AvatarRepository(session).get(payload.avatarId)
     if avatar is None:
         raise HTTPException(status_code=404, detail="Avatar not found")
 
-    gender = avatar.baseGender  # "female" | "male" | "neutral"
-    template_candidates = [
-        template_root / f"{gender}.jpg",
-        template_root / f"{gender}.png",
-        template_root / "neutral.jpg",
-        template_root / "neutral.png",
-    ]
-    template_path = next((p for p in template_candidates if p.exists()), None)
+    gender = avatar.baseGender
+    template_path = next(
+        (p for p in [
+            template_root / f"{gender}.jpg",
+            template_root / f"{gender}.png",
+            template_root / "neutral.jpg",
+            template_root / "neutral.png",
+            _static_template_root / f"{gender}.jpg",
+            _static_template_root / f"{gender}.png",
+            _static_template_root / "neutral.jpg",
+            _static_template_root / "neutral.png",
+        ] if p.exists()),
+        None,
+    )
     if template_path is None:
         raise HTTPException(
             status_code=422,
-            detail=(
-                f"No template photo found. "
-                f"Please add uploads/templates/{gender}.jpg "
-                f"(front-facing standing photo, plain background)."
-            )
+            detail=f"No template photo found. Add uploads/templates/{gender}.jpg (front-facing, plain background).",
         )
 
     tryon_category = _CATEGORY_MAP.get(garment.category, "upper_body")
+    garment_des = f"{garment.name} {garment.category}"
+    base_url = str(request.base_url).rstrip("/")
 
-    client = _replicate_lib.Client(api_token=settings.replicate_api_token)
+    # ── 分派到服务商 ──
+    provider = settings.tryon_provider.lower()
+    if provider == "huggingface":
+        image_url = await _tryon_huggingface(template_path, garment_path, garment_des, base_url)
+    else:
+        image_url = await _tryon_replicate(template_path, garment_path, garment_des, tryon_category)
 
-    try:
-        with open(template_path, "rb") as human_f, open(garment_path, "rb") as garm_f:
-            output = await client.async_run(
-                "cuuupid/idm-vton:0513734a452173b8173e907e3a59d19a36266e55b48528559432bd21c7d7e985",
-                input={
-                    "human_img":    human_f,
-                    "garm_img":     garm_f,
-                    "garment_des":  f"{garment.name} {garment.category}",
-                    "category":     tryon_category,
-                    "is_checked":   True,
-                    "is_checked_crop": False,
-                    "denoise_steps": 30,
-                    "seed":         42,
-                },
-            )
-    except Exception as exc:
-        logger.error("Replicate API error: %s", exc)
-        raise HTTPException(status_code=502, detail=f"AI generation failed: {exc}") from exc
-
-    # output 是 FileOutput 列表或 URL 列表
-    result = output[0] if isinstance(output, list) else output
-    image_url = str(result)
     return {"imageUrl": image_url}
