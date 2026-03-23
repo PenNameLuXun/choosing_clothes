@@ -31,7 +31,7 @@ export interface AvatarBodyModelManifest {
 export const defaultAvatarBodyModelManifest: AvatarBodyModelManifest = {
   modelUrl: "/models/avatar-body/base.glb",
   referenceHeightCm: 172,
-  rootOffsetY: -1.48,
+  rootOffsetY: -0.8587,
   rootRotationY: 0,
   morphMap: {
     torso: {

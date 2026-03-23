@@ -41,8 +41,11 @@ export default async function GarmentsPage() {
         <h1>Garment Library</h1>
         <p className="lead">这是阶段 3 的最小闭环：先把服装记录、分类和图片地址保存起来，为后续解析和试穿任务打底。</p>
         <div className="actions-row">
+          <Link className="action-link" href="/try-on/new">
+            开始试穿
+          </Link>
           <Link className="action-link secondary" href="/avatars">
-            Back to Avatar Library
+            Avatar Library
           </Link>
         </div>
         {error ? <p className="status-line warning-line">{error}</p> : null}

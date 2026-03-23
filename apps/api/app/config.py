@@ -12,8 +12,12 @@ class Settings(BaseSettings):
     api_port: int = 8765
     database_url: str = "postgresql+psycopg://postgres:postgres@127.0.0.1:55432/choosing_clothes"
     upload_dir: str = str(UPLOAD_ROOT)
+    replicate_api_token: str = ""
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=[str(REPO_ROOT / ".env"), ".env"],
+        extra="ignore",
+    )
 
 
 settings = Settings()

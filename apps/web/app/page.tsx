@@ -18,11 +18,14 @@ export default function HomePage() {
           为后面的 3D 试穿链路打底。
         </p>
         <div className="actions-row">
-          <Link className="action-link" href="/avatars">
-            打开 Avatar Library
+          <Link className="action-link" href="/try-on/new">
+            开始试穿
+          </Link>
+          <Link className="action-link secondary" href="/avatars">
+            Avatar Library
           </Link>
           <Link className="action-link secondary" href="/garments">
-            打开 Garment Library
+            Garment Library
           </Link>
         </div>
       </section>

@@ -3,15 +3,22 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import type { AvatarBodySchema } from "@choosing-clothes/shared-types";
 import * as THREE from "three";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import ProceduralAvatarBody from "@/components/procedural-avatar-body";
 import RealAvatarBody from "@/components/real-avatar-body";
+import GarmentBody from "@/components/garment-body";
 import {
   defaultAvatarBodyModelManifest,
   getAvatarBodyModelStatusLabel,
   type AvatarBodyModelStatus
 } from "@/lib/avatar-body-model";
+import type { GarmentCategory } from "@choosing-clothes/shared-types";
+
+export interface GarmentOverlay {
+  category: GarmentCategory;
+  imageUrl?: string;
+}
 
 type ViewMode = "front" | "side";
 
@@ -53,8 +60,9 @@ function ViewerScene({
   frameHeight,
   panX,
   panY,
+  garment,
   onModelStatusChange,
-  onModelBoundsChange
+  onModelBoundsChange,
 }: {
   stats: AvatarBodySchema;
   targetRotation: number;
@@ -63,9 +71,15 @@ function ViewerScene({
   frameHeight: number;
   panX: number;
   panY: number;
+  garment?: GarmentOverlay;
   onModelStatusChange: (status: AvatarBodyModelStatus) => void;
   onModelBoundsChange: (payload: { centerY: number; height: number; width: number }) => void;
 }) {
+  const [bodyScene, setBodyScene] = useState<THREE.Group | null>(null);
+  const onBodyReady = useCallback((instance: THREE.Group) => {
+    setBodyScene(instance);
+  }, []);
+
   return (
     <Canvas className="viewer-canvas" camera={{ position: [0, 0.55, cameraDistance], fov: 24 }} shadows dpr={[1, 1.75]}>
       <color attach="background" args={["#f7efe5"]} />
@@ -93,13 +107,28 @@ function ViewerScene({
         manifest={defaultAvatarBodyModelManifest}
         onStatusChange={onModelStatusChange}
         onBoundsChange={onModelBoundsChange}
+        onBodyReady={onBodyReady}
         fallback={<ProceduralAvatarBody stats={stats} targetRotation={targetRotation} />}
       />
+      {garment && (
+        <GarmentBody
+          category={garment.category}
+          imageUrl={garment.imageUrl}
+          targetRotation={targetRotation}
+          bodyScene={bodyScene}
+        />
+      )}
     </Canvas>
   );
 }
 
-export default function AvatarViewerPlaceholder({ stats }: { stats: AvatarBodySchema }) {
+export default function AvatarViewerPlaceholder({
+  stats,
+  garment,
+}: {
+  stats: AvatarBodySchema;
+  garment?: GarmentOverlay;
+}) {
   const [rotation, setRotation] = useState(0.12);
   const [viewMode, setViewMode] = useState<ViewMode>("front");
   const [cameraDistance, setCameraDistance] = useState(5.8);
@@ -246,6 +275,7 @@ export default function AvatarViewerPlaceholder({ stats }: { stats: AvatarBodySc
           frameHeight={frameHeight}
           panX={panX}
           panY={panY}
+          garment={garment}
           onModelStatusChange={setModelStatus}
           onModelBoundsChange={handleModelBoundsChange}
         />

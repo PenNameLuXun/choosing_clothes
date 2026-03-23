@@ -19,6 +19,15 @@ ensure_env_file() {
   fi
 }
 
+load_nvm() {
+  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+  if [[ -s "$NVM_DIR/nvm.sh" ]]; then
+    # shellcheck source=/dev/null
+    source "$NVM_DIR/nvm.sh"
+    nvm use 18 --silent 2>/dev/null || true
+  fi
+}
+
 is_pid_running() {
   local pid="$1"
   kill -0 "$pid" >/dev/null 2>&1
@@ -39,12 +48,10 @@ ensure_api_venv() {
   fi
 
   echo "Creating API virtual environment..."
-  (
-    cd "$ROOT_DIR/apps/api"
-    python3 -m venv .venv
-    . .venv/bin/activate
-    pip install -r requirements.txt
-  )
+  cd "$ROOT_DIR/apps/api"
+  python3 -m venv .venv
+  .venv/bin/pip install -r requirements.txt
+  cd "$ROOT_DIR"
 }
 
 start_api() {
@@ -58,10 +65,19 @@ start_api() {
   echo "Starting API..."
   (
     cd "$ROOT_DIR/apps/api"
-    nohup bash -lc "source .venv/bin/activate && uvicorn app.main:app --reload --host 0.0.0.0 --port 8765" \
+    nohup bash -c "source .venv/bin/activate && uvicorn app.main:app --reload --host 0.0.0.0 --port 8765" \
       >"$API_LOG_FILE" 2>&1 &
     echo $! >"$API_PID_FILE"
   )
+}
+
+free_port_3000() {
+  local pid
+  pid=$(lsof -ti :3000 2>/dev/null || true)
+  if [[ -n "$pid" ]]; then
+    echo "Freeing port 3000 (pid $pid)..."
+    kill -9 "$pid" 2>/dev/null || true
+  fi
 }
 
 start_web() {
@@ -70,8 +86,10 @@ start_web() {
     return
   fi
 
+  free_port_3000
   echo "Starting web..."
   (
+    load_nvm
     cd "$ROOT_DIR"
     nohup npm run dev:web >"$WEB_LOG_FILE" 2>&1 &
     echo $! >"$WEB_PID_FILE"

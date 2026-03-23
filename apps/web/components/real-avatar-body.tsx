@@ -27,19 +27,22 @@ function LoadedRealAvatarBody({
   stats,
   targetRotation,
   manifest,
-  onBoundsChange
+  onBoundsChange,
+  onBodyReady,
 }: {
   scene: THREE.Group;
   stats: AvatarBodySchema;
   targetRotation: number;
   manifest: AvatarBodyModelManifest;
   onBoundsChange?: (payload: { centerY: number; height: number; width: number }) => void;
+  onBodyReady?: (instance: THREE.Group) => void;
 }) {
   const rootRef = useRef<THREE.Group>(null);
   const instance = useMemo(() => clone(scene) as THREE.Group, [scene]);
 
   useLayoutEffect(() => {
     applyAvatarSchemaToBodyModel(instance, stats, manifest);
+    onBodyReady?.(instance);
     if (rootRef.current) {
       rootRef.current.position.y = manifest.rootOffsetY;
       rootRef.current.updateMatrixWorld(true);
@@ -55,7 +58,7 @@ function LoadedRealAvatarBody({
         width: size.x
       });
     }
-  }, [instance, manifest, onBoundsChange, stats]);
+  }, [instance, manifest, onBoundsChange, onBodyReady, stats]);
 
   useFrame((_, delta) => {
     if (!rootRef.current) {
@@ -78,6 +81,7 @@ export default function RealAvatarBody({
   manifest = defaultAvatarBodyModelManifest,
   onStatusChange,
   onBoundsChange,
+  onBodyReady,
   fallback
 }: {
   stats: AvatarBodySchema;
@@ -85,6 +89,7 @@ export default function RealAvatarBody({
   manifest?: AvatarBodyModelManifest;
   onStatusChange?: (status: AvatarBodyModelStatus) => void;
   onBoundsChange?: (payload: { centerY: number; height: number; width: number }) => void;
+  onBodyReady?: (instance: THREE.Group) => void;
   fallback: React.ReactNode;
 }) {
   const [status, setStatus] = useState<AvatarBodyModelStatus>("loading");
@@ -134,6 +139,7 @@ export default function RealAvatarBody({
       targetRotation={targetRotation}
       manifest={manifest}
       onBoundsChange={onBoundsChange}
+      onBodyReady={onBodyReady}
     />
   );
 }
